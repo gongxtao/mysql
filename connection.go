@@ -79,6 +79,9 @@ func (mc *mysqlConn) markBadConn(err error) error {
 	if mc == nil {
 		return err
 	}
+	if err == ErrInvalidConn {
+		return driver.ErrBadConn
+	}
 	if err != errBadConnNoWrite {
 		return err
 	}
@@ -353,18 +356,18 @@ func (mc *mysqlConn) exec(query string) error {
 	// Read Result
 	resLen, err := mc.readResultSetHeaderPacket()
 	if err != nil {
-		return err
+		return mc.markBadConn(err)
 	}
 
 	if resLen > 0 {
 		// columns
 		if err := mc.readUntilEOF(); err != nil {
-			return err
+			return mc.markBadConn(err)
 		}
 
 		// rows
 		if err := mc.readUntilEOF(); err != nil {
-			return err
+			return mc.markBadConn(err)
 		}
 	}
 
@@ -408,13 +411,13 @@ func (mc *mysqlConn) query(query string, args []driver.Value) (*textRows, error)
 				case nil, io.EOF:
 					return rows, nil
 				default:
-					return nil, err
+					return nil, mc.markBadConn(err)
 				}
 			}
 
 			// Columns
 			rows.rs.columns, err = mc.readColumns(resLen)
-			return rows, err
+			return rows, mc.markBadConn(err)
 		}
 	}
 	return nil, mc.markBadConn(err)
